@@ -252,6 +252,30 @@ public class TestHttp2Section_8_1 extends Http2TestBase {
 
 
     @Test
+    public void testAuthorityHeaderMissing() throws Exception {
+        http2Connect();
+
+        // Neither an :authority pseudo header nor a host header
+        List<Header> headers = new ArrayList<>(3);
+        headers.add(new Header(":method", "GET"));
+        headers.add(new Header(":scheme", "http"));
+        headers.add(new Header(":path", "/simple"));
+
+        byte[] headersFrameHeader = new byte[9];
+        ByteBuffer headersPayload = ByteBuffer.allocate(128);
+
+        buildGetRequest(headersFrameHeader, headersPayload, null, headers, 3);
+
+        writeFrame(headersFrameHeader, headersPayload);
+
+        parser.readFrame();
+
+        String trace = output.getTrace();
+        Assert.assertTrue(trace, trace.contains("0-Goaway-[3]-[1]"));
+    }
+
+
+    @Test
     public void testHostHeaderDuplicate() throws Exception {
         http2Connect();
 
