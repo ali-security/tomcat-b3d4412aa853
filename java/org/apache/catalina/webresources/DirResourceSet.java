@@ -36,6 +36,7 @@ import org.apache.catalina.WebResourceRoot.ResourceSetType;
 import org.apache.catalina.util.ResourceSet;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+import org.apache.tomcat.util.compat.JreCompat;
 import org.apache.tomcat.util.http.RequestUtil;
 
 /**
@@ -328,6 +329,36 @@ public class DirResourceSet extends AbstractFileResourceSet implements WebResour
                     log.warn(sm.getString("dirResourceSet.manifestFail", mf.getAbsolutePath()), e);
                 }
             }
+        }
+        // Check for exposure to CVE-2024-56337
+        if (isReadOnly()) {
+            // CVE-2024-56337 (nor CVE-2024-50379) is not exploitable on a read-only ResourceSet
+            return;
+        }
+        if (JreCompat.getInstance().isCanonCachesDisabled()) {
+            // CVE-2024-56337 (nor CVE-2024-50379) is not exploitable if the canonical file name cache is disabled
+            return;
+        }
+        // This ResourceSet may be exposed to CVE-2024-56337.
+        if (JreCompat.getInstance().disableCanonCaches()) {
+            /*
+             * The canonical file name cache was enabled and is now disabled.
+             */
+            log.warn(sm.getString("dirResourceSet.canonCaches.disabled", getFileBase(),
+                    getRoot().getContext().getName()));
+        } else {
+            /*
+             * The canonical file name cache could not be disabled (or Tomcat cannot confirm it has been disabled). This
+             * ResourceSet may be exposed to CVE-2024-56337.
+             *
+             * Seal: upstream throws an IllegalStateException here, which prevents the affected web application from
+             * starting. That turns this fix into a breaking change for a drop-in replacement library, so the sealed
+             * build logs a warning instead. The protection itself is unchanged: JreCompat.disableCanonCaches() has
+             * still been attempted above and, when it cannot be confirmed, the CVE-2024-50379 WebResourceLockSet
+             * locking (already applied to this version) continues to cover the underlying read/write race.
+             */
+            log.warn(sm.getString("dirResourceSet.canonCaches.enabled", getFileBase(),
+                    getRoot().getContext().getName()));
         }
     }
 
